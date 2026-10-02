@@ -26,6 +26,20 @@
     "plugins": [
       "expo-router",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow KMPOS Mobile to use your location to capture field markers."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow KMPOS Mobile to use your camera for field photos.",
+          "photosPermission": "Allow KMPOS Mobile to access photos for field records.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
