@@ -1,3 +1,6 @@
+
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -13,14 +16,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   addKmPost,
   fetchKmPosRecords,
   getPhotoUrl,
+  deleteKmPost,
   updateKmPos,
   uploadKmPostPhoto,
 } from '@/services/api';
@@ -30,6 +32,13 @@ export default function CaptureScreen() {
   const editing = Boolean(params.fid);
   const [fid] = useState(params.fid ?? '');
   const [routeNo, setRouteNo] = useState('');
+  const [highway, setHighway] = useState('');
+  const [kmDistance, setKmDistance] = useState('');
+  const [destination, setDestination] = useState('');
+  const [owner, setOwner] = useState('');
+  const [type, setType] = useState('');
+  const [status, setStatus] = useState('');
+  const [remarks, setRemarks] = useState('');
   const [state, setState] = useState('');
   const [district, setDistrict] = useState('');
   const [streetView, setStreetView] = useState('');
@@ -44,6 +53,13 @@ export default function CaptureScreen() {
       const record = records.find((item) => String(item.fid) === params.fid);
       if (!record) return;
       setRouteNo(record.route_no ?? '');
+      setHighway(record.highway ?? '');
+      setKmDistance(String(record.dist_1 ?? ''));
+      setDestination(record.pri_desc1 ?? '');
+      setOwner(record.pemilik ?? '');
+      setType(record.type ?? '');
+      setStatus(record.Status ?? '');
+      setRemarks(record.Remarks ?? '');
       setState(record.state ?? '');
       setDistrict(record.district ?? '');
       setStreetView(record.Google_StreetView ?? record['Google StreetView'] ?? '');
@@ -86,26 +102,59 @@ export default function CaptureScreen() {
     setCoordinates(result.coords);
   }
 
+  function confirmDelete() {
+    if (!editing) return;
+    Alert.alert('Delete KM post?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void deleteKmPost(Number(fid))
+            .then(() => router.back())
+            .catch((error: unknown) => {
+              Alert.alert(
+                'Unable to delete',
+                error instanceof Error ? error.message : 'The server request failed.',
+              );
+            });
+        },
+      },
+    ]);
+  }
+
   async function saveRecord() {
     const recordId = Number(fid);
     if (editing && (!Number.isInteger(recordId) || recordId < 1)) {
       Alert.alert('Invalid record ID', 'Enter a positive integer fid.');
       return;
     }
-    if (!routeNo.trim() && !coordinates) {
-      Alert.alert('Add marker details', 'Enter a route number or capture your GPS location.');
+
+    if (!routeNo.trim() || !coordinates) {
+      Alert.alert('Add marker details', 'Enter a route number and select a location.');
+      return;
+    }
+    if (coordinates.latitude < -90 || coordinates.latitude > 90 ||
+      coordinates.longitude < -180 || coordinates.longitude > 180) {
+      Alert.alert('Invalid coordinates', 'Latitude or longitude is outside the valid range.');
       return;
     }
 
     try {
       setSaving(true);
       const data = {
+        highway: highway.trim() || undefined,
         route_no: routeNo.trim() || undefined,
+        dist_1: kmDistance.trim() || undefined,
+        pri_desc1: destination.trim() || undefined,
         state: state.trim() || undefined,
         district: district.trim() || undefined,
-        google_street_view: streetView.trim() || undefined,
+        pemilik: owner.trim() || undefined,
+        type: type.trim() || undefined,
+        Status: status.trim() || undefined,
+        Google_StreetView: streetView.trim() || undefined,
+        Remarks: remarks.trim() || undefined,
         ...(coordinates ? { latitude: coordinates.latitude, longitude: coordinates.longitude } : {}),
-        remarks: photoUri ? `Photo captured: ${photoUri}` : undefined,
       };
       const savedRecord = editing
         ? await updateKmPos(recordId, data)
@@ -153,18 +202,72 @@ export default function CaptureScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Details</Text>
+        <Text style={styles.label}>Highway</Text>
+        <TextInput value={highway} onChangeText={setHighway} placeholder="Highway name" style={styles.input} />
         <Text style={styles.label}>Route number</Text>
         <TextInput value={routeNo} onChangeText={setRouteNo} placeholder="Route number (example: 1)" style={styles.input} />
+        <Text style={styles.label}>KM distance</Text>
+        <TextInput value={kmDistance} onChangeText={setKmDistance} keyboardType="decimal-pad" placeholder="KM distance" style={styles.input} />
+        <Text style={styles.label}>Destination</Text>
+        <TextInput value={destination} onChangeText={setDestination} placeholder="Primary destination" style={styles.input} />
         <Text style={styles.label}>State</Text>
         <TextInput value={state} onChangeText={setState} placeholder="State" style={styles.input} />
         <Text style={styles.label}>District</Text>
         <TextInput value={district} onChangeText={setDistrict} placeholder="District" style={styles.input} />
+        <Text style={styles.label}>Owner</Text>
+        <TextInput value={owner} onChangeText={setOwner} placeholder="Owner" style={styles.input} />
+        <Text style={styles.label}>Type</Text>
+        <TextInput value={type} onChangeText={setType} placeholder="A, B, Highway or Federal" style={styles.input} />
+        <Text style={styles.label}>Status</Text>
+        <TextInput value={status} onChangeText={setStatus} placeholder="Status" style={styles.input} />
         <Text style={styles.label}>Street View link <Text style={styles.optional}>(optional)</Text></Text>
         <TextInput value={streetView} onChangeText={setStreetView} placeholder="Street View URL (optional)" style={styles.input} />
+        <Text style={styles.label}>Remarks</Text>
+        <TextInput value={remarks} onChangeText={setRemarks} placeholder="Remarks" style={[styles.input, styles.multilineInput]} multiline />
         <Text style={styles.sectionLabel}>Field capture</Text>
         <Text style={styles.helperText}>
-          Take a clear photo of the KM road signboard at this location.
+          Tap the map or drag the marker to choose the KM post location.
         </Text>
+        {Platform.OS !== 'web' ? (() => {
+          const { default: MapView, Marker } =
+            require('react-native-maps') as typeof import('react-native-maps');
+          const mapCoordinate = coordinates
+            ? { latitude: coordinates.latitude, longitude: coordinates.longitude }
+            : { latitude: 3.139, longitude: 101.6869 };
+          return (
+            <MapView
+              style={styles.placementMap}
+              initialRegion={{ ...mapCoordinate, latitudeDelta: 0.04, longitudeDelta: 0.04 }}
+              onPress={(event) => {
+                const { latitude, longitude } = event.nativeEvent.coordinate;
+                setCoordinates({
+                  latitude,
+                  longitude,
+                  altitude: null,
+                  altitudeAccuracy: null,
+                  heading: null,
+                  speed: null,
+                  accuracy: null,
+                });
+              }}>
+              {coordinates ? (
+                <Marker
+                  coordinate={mapCoordinate}
+                  draggable
+                  onDragEnd={(event) => {
+                    const { latitude, longitude } = event.nativeEvent.coordinate;
+                    setCoordinates((current) => current ? { ...current, latitude, longitude } : current);
+                  }}
+                />
+              ) : null}
+            </MapView>
+          );
+        })() : null}
+        {coordinates ? (
+          <Text style={styles.coordinatesText}>
+            {coordinates.latitude.toFixed(6)}, {coordinates.longitude.toFixed(6)}
+          </Text>
+        ) : null}
         <View style={styles.captureRow}>
           <Pressable onPress={() => void captureLocation()} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>
@@ -187,6 +290,11 @@ export default function CaptureScreen() {
         {streetView ? (
           <Pressable onPress={() => void Linking.openURL(streetView)} style={styles.streetViewButton}>
             <Text style={styles.secondaryButtonText}>Open Street View</Text>
+          </Pressable>
+        ) : null}
+        {editing ? (
+          <Pressable onPress={confirmDelete} style={styles.deleteButton}>
+            <Text style={styles.deleteButtonText}>Delete KM post</Text>
           </Pressable>
         ) : null}
         <Pressable
@@ -248,6 +356,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     width: '100%',
   },
+  placementMap: { borderRadius: 10, height: 220, marginTop: 12 },
+  coordinatesText: { color: '#0369a1', fontSize: 13, fontWeight: '700', marginTop: 8 },
   input: {
     alignSelf: 'stretch',
     borderColor: '#d0d0d0',
@@ -257,6 +367,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     padding: 12,
   },
+  multilineInput: { minHeight: 88, textAlignVertical: 'top' },
   primaryButton: {
     backgroundColor: '#007AFF',
     borderRadius: 8,
@@ -272,6 +383,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  deleteButton: {
+    borderColor: '#dc2626',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 16,
+    padding: 12,
+  },
+  deleteButtonText: { color: '#b91c1c', fontWeight: '700', textAlign: 'center' },
   captureRow: { flexDirection: 'row', gap: 8, marginTop: 18 },
   secondaryButton: {
     borderColor: '#0284c7',

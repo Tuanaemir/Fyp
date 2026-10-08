@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchKmPosRecords, type KmPosRecord } from '@/services/api';
@@ -54,13 +54,21 @@ export default function RecordsScreen() {
       {loading ? (
         <ActivityIndicator color="#0284c7" size="large" style={styles.loader} />
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
-          <Text style={styles.resultCount}>
-            {records.length} {records.length === 1 ? 'marker' : 'markers'}
-          </Text>
-          {records.map((record) => (
+        <FlatList
+          data={records}
+          keyExtractor={(record) => String(record.fid)}
+          contentContainerStyle={styles.list}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={5}
+          removeClippedSubviews
+          ListHeaderComponent={
+            <Text style={styles.resultCount}>
+              {records.length} {records.length === 1 ? 'marker' : 'markers'}
+            </Text>
+          }
+          renderItem={({ item: record }) => (
             <Pressable
-              key={record.fid}
               onPress={() => router.push(`/capture?fid=${record.fid}`)}
               style={styles.record}>
               <View style={styles.routeBadge}>
@@ -91,11 +99,11 @@ export default function RecordsScreen() {
               </View>
               <Text style={styles.chevron}>›</Text>
             </Pressable>
-          ))}
-          {records.length === 0 ? (
+          )}
+          ListEmptyComponent={
             <Text style={styles.empty}>No markers found. Try another search.</Text>
-          ) : null}
-        </ScrollView>
+          }
+        />
       )}
     </SafeAreaView>
   );
